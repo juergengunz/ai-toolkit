@@ -72,6 +72,8 @@ import hashlib
 from toolkit.util.blended_blur_noise import get_blended_blur_noise
 from toolkit.util.get_model import get_model_class
 
+import bitsandbytes as bnb
+
 def flush():
     torch.cuda.empty_cache()
     gc.collect()
@@ -80,7 +82,7 @@ def flush():
 class BaseSDTrainProcess(BaseTrainProcess):
 
     def __init__(self, process_id: int, job, config: OrderedDict, custom_pipeline=None):
-        super().__init__(process_id, job, config)
+        super().__init__(process_id, job, config, custom_pipeline)
         self.accelerator: Accelerator = get_accelerator()
         if self.accelerator.is_local_main_process:
             transformers.utils.logging.set_verbosity_warning()
@@ -236,6 +238,22 @@ class BaseSDTrainProcess(BaseTrainProcess):
         self.ema: ExponentialMovingAverage = None
         
         validate_configs(self.train_config, self.model_config, self.save_config)
+
+        # Get Adam parameters from config or use defaults
+        self.adam_beta1 = getattr(self.train_config, 'adam_beta_1', 0.9)
+        self.adam_beta2 = getattr(self.train_config, 'adam_beta_2', 0.999)
+        self.adam_eps = getattr(self.train_config, 'adam_eps', 1e-08)
+        
+        # When creating the optimizer, use these parameters
+        if self.train_config.optimizer == 'adam8bit':
+            self.optimizer = bnb.optim.Adam8bit(
+                self.params,
+                lr=self.train_config.lr,
+                betas=(self.adam_beta1, self.adam_beta2),
+                eps=self.adam_eps
+            )
+
+        self.warmup_steps = self.train_config.warmup_steps if hasattr(self.train_config, 'warmup_steps') else 0
 
     def post_process_generate_image_config_list(self, generate_image_config_list: List[GenerateImageConfig]):
         # override in subclass
@@ -736,9 +754,70 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # otherwise params will be gathered through normal means
         return None
 
-    def hook_train_loop(self, batch):
-        # return loss
-        return 0.0
+    def hook_train_loop(self, batch: Union[DataLoaderBatchDTO, List[DataLoaderBatchDTO]]):
+        if isinstance(batch, list):
+            batch_list = batch
+        else:
+            batch_list = [batch]
+        total_loss = None
+        self.optimizer.zero_grad()
+        for batch in batch_list:
+            loss = self.train_single_accumulation(batch)
+            if total_loss is None:
+                total_loss = loss
+            else:
+                total_loss += loss
+            if len(batch_list) > 1 and self.model_config.low_vram:
+                torch.cuda.empty_cache()
+
+        if not self.is_grad_accumulation_step:
+            if self.train_config.optimizer != 'adafactor':
+                if isinstance(self.params[0], dict):
+                    for i in range(len(self.params)):
+                        self.accelerator.clip_grad_norm_(self.params[i]['params'], self.train_config.max_grad_norm)
+                else:
+                    self.accelerator.clip_grad_norm_(self.params, self.train_config.max_grad_norm)
+            
+            with self.timer('optimizer_step'):
+                # Apply learning rate warmup
+                lr_scale = self.get_lr_scale(self.current_step)
+                for param_group in self.optimizer.param_groups:
+                    param_group['lr'] = self.train_config.lr * lr_scale
+                
+                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
+                if self.adapter and isinstance(self.adapter, CustomAdapter):
+                    self.adapter.post_weight_update()
+            
+            if self.ema is not None:
+                with self.timer('ema_update'):
+                    self.ema.update()
+        else:
+            pass
+
+        with self.timer('scheduler_step'):
+            self.lr_scheduler.step()
+
+        if self.embedding is not None:
+            with self.timer('restore_embeddings'):
+                self.embedding.restore_embeddings()
+        if self.adapter is not None and isinstance(self.adapter, ClipVisionAdapter):
+            with self.timer('restore_adapter'):
+                self.adapter.restore_embeddings()
+
+        loss_dict = OrderedDict(
+            {'loss': loss.item()}
+        )
+
+        self.end_of_training_loop()
+
+        return loss_dict
+    
+    def get_lr_scale(self, step):
+        if step < self.warmup_steps:
+            # Linear warmup
+            return float(step) / float(max(1, self.warmup_steps))
+        return 1.0
     
     def hook_after_sd_init_before_load(self):
         pass
