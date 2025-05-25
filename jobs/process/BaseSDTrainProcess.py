@@ -788,7 +788,12 @@ class BaseSDTrainProcess(BaseTrainProcess):
             pass
 
         with self.timer('scheduler_step'):
-            self.lr_scheduler.step()
+            # Only step the main LR scheduler if we are past the warmup phase
+            if self.step_num >= self.warmup_steps:
+                self.lr_scheduler.step()
+            # During warmup, the LR is manually scaled, and the main scheduler should not interfere.
+            # For the first step after warmup (step_num == warmup_steps), this will apply the main scheduler's logic
+            # to what is now the full base learning rate (since lr_scale became 1.0).
 
         if self.embedding is not None:
             with self.timer('restore_embeddings'):
