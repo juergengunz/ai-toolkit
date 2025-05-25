@@ -82,7 +82,7 @@ def flush():
 class BaseSDTrainProcess(BaseTrainProcess):
 
     def __init__(self, process_id: int, job, config: OrderedDict, custom_pipeline=None):
-        super().__init__(process_id, job, config, custom_pipeline)
+        super().__init__(process_id, job, config)
         self.accelerator: Accelerator = get_accelerator()
         if self.accelerator.is_local_main_process:
             transformers.utils.logging.set_verbosity_warning()
