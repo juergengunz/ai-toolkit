@@ -2077,7 +2077,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
         # zero any gradients
         self.optimizer.zero_grad()
 
-        self.lr_scheduler.step(self.step_num)
+        # self.lr_scheduler.step(self.step_num) # THIS LINE IS REMOVED
 
         self.sd.set_device_state(self.train_device_state_preset)
         flush()
