@@ -21,10 +21,17 @@ def calculate_shift(
 
 class CustomFlowMatchEulerDiscreteScheduler(FlowMatchEulerDiscreteScheduler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.init_noise_sigma = self.config.get("init_noise_sigma", 1.0)
-        self.timestep_type = self.config.get("timestep_type", "linear")
-        self.custom_timesteps = self.config.get("custom_timesteps", None)
+        # Pop custom arguments before passing to super, so super doesn't complain if they aren't its own config fields
+        # and so we can ensure they are set on the instance correctly.
+        self.custom_timesteps = kwargs.pop("custom_timesteps", None)
+        self.timestep_type = kwargs.pop("timestep_type", "linear") # Default to linear if not provided
+
+        super().__init__(*args, **kwargs) # Initializes self.config with remaining kwargs
+
+        # We can still allow overrides from self.config if needed, but direct pop is safer for these specific ones.
+        # If self.custom_timesteps is still None here, it means it wasn't in kwargs or was explicitly None.
+        # Similarly for self.timestep_type.
+        self.init_noise_sigma = self.config.get("init_noise_sigma", 1.0) # Get from self.config or default
 
         with torch.no_grad():
             # create weights for timesteps
