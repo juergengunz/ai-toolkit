@@ -771,10 +771,10 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     self.accelerator.clip_grad_norm_(self.params, self.train_config.max_grad_norm)
             
             with self.timer('optimizer_step'):
-                # Apply learning rate warmup
-                lr_scale = self.get_lr_scale(self.step_num)
-                for param_group in self.optimizer.param_groups:
-                    param_group['lr'] = self.train_config.lr * lr_scale
+                # Apply learning rate warmup - REMOVED: HF Scheduler will handle this
+                # lr_scale = self.get_lr_scale(self.step_num)
+                # for param_group in self.optimizer.param_groups:
+                #    param_group['lr'] = self.train_config.lr * lr_scale
                 
                 self.optimizer.step()
                 self.optimizer.zero_grad(set_to_none=True)
@@ -788,12 +788,19 @@ class BaseSDTrainProcess(BaseTrainProcess):
             pass
 
         with self.timer('scheduler_step'):
-            # Only step the main LR scheduler if we are past the warmup phase
-            if self.step_num >= self.warmup_steps:
-                self.lr_scheduler.step()
-            # During warmup, the LR is manually scaled, and the main scheduler should not interfere.
-            # For the first step after warmup (step_num == warmup_steps), this will apply the main scheduler's logic
-            # to what is now the full base learning rate (since lr_scale became 1.0).
+            # Only step the main LR scheduler if we are past the warmup phase - REMOVED
+            # if self.step_num >= self.warmup_steps:
+            # self.lr_scheduler.step()
+            # During warmup, the LR is manually scaled, and the main scheduler should not interfere. - REMOVED
+            # For the first step after warmup (step_num == warmup_steps), this will apply the main scheduler's logic - REMOVED
+            # to what is now the full base learning rate (since lr_scale became 1.0). - REMOVED
+            
+            # The HF scheduler should be stepped after the optimizer step.
+            # If using gradient accumulation, this step might be managed by Accelerator if optimizer is wrapped,
+            # but typically scheduler.step() is called after optimizer.step().
+            # For simplicity and direct control here, we step it if an optimizer step was made.
+            if not self.is_grad_accumulation_step:
+                 self.lr_scheduler.step()
 
         if self.embedding is not None:
             with self.timer('restore_embeddings'):
@@ -811,10 +818,12 @@ class BaseSDTrainProcess(BaseTrainProcess):
         return loss_dict
     
     def get_lr_scale(self, step):
-        if step < self.warmup_steps:
-            # Linear warmup
-            return float(step) / float(max(1, self.warmup_steps))
-        return 1.0
+        # This manual scaling is no longer needed if using HF schedulers with warmup
+        # if step < self.warmup_steps:
+        #     # Linear warmup
+        #     return float(step) / float(max(1, self.warmup_steps))
+        # return 1.0
+        pass # Function can be removed or left as pass if other parts might use it, but for LR, it's deprecated
     
     def hook_after_sd_init_before_load(self):
         pass
@@ -2004,16 +2013,13 @@ class BaseSDTrainProcess(BaseTrainProcess):
             # Update the learning rates if they changed
             # optimizer.param_groups = previous_params
 
-        lr_scheduler_params = self.train_config.lr_scheduler_params
-
-        # make sure it had bare minimum
-        if 'max_iterations' not in lr_scheduler_params:
-            lr_scheduler_params['total_iters'] = self.train_config.steps
-
+        # Use the new get_lr_scheduler that expects num_warmup_steps and num_training_steps
         lr_scheduler = get_lr_scheduler(
-            self.train_config.lr_scheduler,
-            self.optimizer,
-            **lr_scheduler_params
+            name=self.train_config.lr_scheduler,
+            optimizer=self.optimizer,
+            num_warmup_steps=self.warmup_steps, # self.warmup_steps is self.train_config.warmup_steps
+            num_training_steps=self.train_config.steps,
+            **self.train_config.lr_scheduler_params # Pass other specific scheduler params directly
         )
         self.lr_scheduler = lr_scheduler
 

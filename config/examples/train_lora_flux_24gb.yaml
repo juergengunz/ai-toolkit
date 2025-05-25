@@ -51,6 +51,7 @@ config:
         adam_beta_1: 0.9
         adam_beta_2: 0.999
         adam_eps: 1e-08
+        lr_scheduler: "cosine"
         timestep_type: "custom"
         custom_timesteps: [960, 893, 866, 839, 812, 785, 757, 730, 703, 676, 649, 622, 595, 568, 541, 514, 486, 459, 432, 405, 378, 351, 324, 297, 270, 243, 215, 188, 161, 134, 107, 40]
         gpu_noise: true

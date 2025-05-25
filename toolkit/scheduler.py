@@ -1,57 +1,59 @@
 import torch
 from typing import Optional
-from diffusers.optimization import SchedulerType, TYPE_TO_SCHEDULER_FUNCTION, get_constant_schedule_with_warmup
+# Use the get_scheduler from diffusers.optimization which is robust
+from diffusers.optimization import get_scheduler, SchedulerType
 
 
 def get_lr_scheduler(
-        name: Optional[str],
+        name: str, # Should be a string recognized by SchedulerType
         optimizer: torch.optim.Optimizer,
-        **kwargs,
+        num_warmup_steps: Optional[int] = 0,
+        num_training_steps: Optional[int] = None,
+        **kwargs, # Allows for other scheduler-specific arguments from lr_scheduler_params
 ):
-    if name == "cosine":
-        if 'total_iters' in kwargs:
-            kwargs['T_max'] = kwargs.pop('total_iters')
-        return torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, **kwargs
-        )
-    elif name == "cosine_with_restarts":
-        if 'total_iters' in kwargs:
-            kwargs['T_0'] = kwargs.pop('total_iters')
-        return torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer, **kwargs
-        )
-    elif name == "step":
+    """
+    Returns a learning rate scheduler from the Hugging Face Transformers/Diffusers library.
 
-        return torch.optim.lr_scheduler.StepLR(
-            optimizer, **kwargs
-        )
-    elif name == "constant":
-        if 'factor' not in kwargs:
-            kwargs['factor'] = 1.0
+    Args:
+        name (str): The name of the scheduler (e.g., "linear", "cosine", 
+                      "cosine_with_restarts", "polynomial", "constant", 
+                      "constant_with_warmup").
+        optimizer (torch.optim.Optimizer): The optimizer.
+        num_warmup_steps (Optional[int]): The number of steps for the warmup phase.
+        num_training_steps (Optional[int]): The total number of training steps.
+        **kwargs: Additional arguments specific to the scheduler type.
+    """
+    if num_training_steps is None:
+        raise ValueError("num_training_steps must be provided to get_lr_scheduler.")
 
-        return torch.optim.lr_scheduler.ConstantLR(optimizer, **kwargs)
-    elif name == "linear":
+    try:
+        # Map common names to SchedulerType if necessary, or expect direct SchedulerType string
+        # For example, if user passes "cosine", SchedulerType("cosine") is "cosine".
+        # If user passes "cosine_with_warmup", it should be SchedulerType.COSINE_WITH_RESTARTS or similar,
+        # though many schedulers inherently handle warmup if num_warmup_steps > 0.
+        
+        # The `get_scheduler` function from diffusers/transformers handles mapping string names
+        # to the correct scheduler functions and passes num_warmup_steps, num_training_steps,
+        # and other kwargs appropriately.
+        
+        # Clean up any problematic kwargs that might have been added by older calling code
+        kwargs.pop('total_iters', None)
+        kwargs.pop('T_max', None)
+        kwargs.pop('T_0', None)
 
-        return torch.optim.lr_scheduler.LinearLR(
-            optimizer, **kwargs
+        scheduler = get_scheduler(
+            name=name,
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps,
+            **kwargs # Pass through any other specific params from lr_scheduler_params
         )
-    elif name == 'constant_with_warmup':
-        # see if num_warmup_steps is in kwargs
-        if 'num_warmup_steps' not in kwargs:
-            print(f"WARNING: num_warmup_steps not in kwargs. Using default value of 1000")
-            kwargs['num_warmup_steps'] = 1000
-        del kwargs['total_iters']
-        return get_constant_schedule_with_warmup(optimizer, **kwargs)
-    else:
-        # try to use a diffusers scheduler
-        print(f"Trying to use diffusers scheduler {name}")
-        try:
-            name = SchedulerType(name)
-            schedule_func = TYPE_TO_SCHEDULER_FUNCTION[name]
-            return schedule_func(optimizer, **kwargs)
-        except Exception as e:
-            print(e)
-            pass
-        raise ValueError(
-            "Scheduler must be cosine, cosine_with_restarts, step, linear or constant"
-        )
+        return scheduler
+    except Exception as e:
+        print(f"Error creating scheduler '{name}' with Hugging Face/Diffusers: {e}")
+        print(f"Make sure '{name}' is a valid scheduler name recognized by `diffusers.optimization.SchedulerType` "
+              f"or `transformers.optimization.SchedulerType` and all required arguments are provided (like num_training_steps).")
+        print("Valid names include: linear, cosine, cosine_with_restarts, polynomial, constant, constant_with_warmup.")
+        # Fallback or re-raise, depending on desired strictness
+        # For now, re-raise to make issues apparent
+        raise ValueError(f"Could not create scheduler: {name}") from e
