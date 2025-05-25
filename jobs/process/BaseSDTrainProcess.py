@@ -1936,13 +1936,13 @@ class BaseSDTrainProcess(BaseTrainProcess):
             # previous param groups
             # previous_params = copy.deepcopy(optimizer.param_groups)
             previous_lrs = []
-            for group in optimizer.param_groups:
+            for group in self.optimizer.param_groups:
                 previous_lrs.append(group['lr'])
 
             try:
                 print_acc(f"Loading optimizer state from {optimizer_state_file_path}")
                 optimizer_state_dict = torch.load(optimizer_state_file_path, weights_only=True)
-                optimizer.load_state_dict(optimizer_state_dict)
+                self.optimizer.load_state_dict(optimizer_state_dict)
                 del optimizer_state_dict
                 flush()
             except Exception as e:
@@ -1952,7 +1952,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
             # update the optimizer LR from the params
             print_acc(f"Updating optimizer LR from params")
             if len(previous_lrs) > 0:
-                for i, group in enumerate(optimizer.param_groups):
+                for i, group in enumerate(self.optimizer.param_groups):
                     group['lr'] = previous_lrs[i]
                     group['initial_lr'] = previous_lrs[i]
 
@@ -1967,7 +1967,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
         lr_scheduler = get_lr_scheduler(
             self.train_config.lr_scheduler,
-            optimizer,
+            self.optimizer,
             **lr_scheduler_params
         )
         self.lr_scheduler = lr_scheduler
@@ -2024,7 +2024,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
             dataloader_iterator_reg = None
 
         # zero any gradients
-        optimizer.zero_grad()
+        self.optimizer.zero_grad()
 
         self.lr_scheduler.step(self.step_num)
 
@@ -2161,18 +2161,18 @@ class BaseSDTrainProcess(BaseTrainProcess):
             with torch.no_grad():
                 # torch.cuda.empty_cache()
                 # if optimizer has get_lrs method, then use it
-                if hasattr(optimizer, 'get_avg_learning_rate'):
-                    learning_rate = optimizer.get_avg_learning_rate()
-                elif hasattr(optimizer, 'get_learning_rates'):
-                    learning_rate = optimizer.get_learning_rates()[0]
+                if hasattr(self.optimizer, 'get_avg_learning_rate'):
+                    learning_rate = self.optimizer.get_avg_learning_rate()
+                elif hasattr(self.optimizer, 'get_learning_rates'):
+                    learning_rate = self.optimizer.get_learning_rates()[0]
                 elif self.train_config.optimizer.lower().startswith('dadaptation') or \
                         self.train_config.optimizer.lower().startswith('prodigy'):
                     learning_rate = (
-                            optimizer.param_groups[0]["d"] *
-                            optimizer.param_groups[0]["lr"]
+                            self.optimizer.param_groups[0]["d"] *
+                            self.optimizer.param_groups[0]["lr"]
                     )
                 else:
-                    learning_rate = optimizer.param_groups[0]['lr']
+                    learning_rate = self.optimizer.param_groups[0]['lr']
 
                 prog_bar_string = f"lr: {learning_rate:.1e}"
                 for key, value in loss_dict.items():
@@ -2216,7 +2216,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         self.save(self.step_num)
                         self.ensure_params_requires_grad()
                         # clear any grads
-                        optimizer.zero_grad()
+                        self.optimizer.zero_grad()
                         flush()
                         flush_next = True
                         if self.progress_bar is not None:
@@ -2313,7 +2313,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
             self.sd,
             unet,
             noise_scheduler,
-            optimizer,
             self.network,
             tokenizer,
             text_encoder,
