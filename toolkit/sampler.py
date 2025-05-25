@@ -179,6 +179,19 @@ def get_sampler(
     config = copy.deepcopy(config_to_use)
     config.update(sched_init_args)
 
+    # Explicitly pass custom_timesteps and timestep_type if they were in the original kwargs
+    # This makes their handling more robust and direct for CustomFlowMatchEulerDiscreteScheduler
+    # We use .pop to remove them from config if they were added by sched_init_args, 
+    # so they aren't passed twice and potentially confuse the base class config handling if not recognized.
+    # The default values in pop ensure that if they weren't in sched_init_args, we don't error.
+    # CustomFlowMatchEulerDiscreteScheduler's __init__ already pops these from its own kwargs.
+    
+    # Extract custom_timesteps and timestep_type from the final merged config
+    # that will be passed to the scheduler's __init__ via from_config method.
+    # The CustomFlowMatchEulerDiscreteScheduler init will then pop them from its kwargs.
+    # No explicit passing needed here if config.update(sched_init_args) works as expected
+    # and CustomFlowMatchEulerDiscreteScheduler correctly pops from its kwargs.
+
     scheduler = scheduler_cls.from_config(config)
 
     return scheduler

@@ -1205,11 +1205,26 @@ class BaseSDTrainProcess(BaseTrainProcess):
                     elif hasattr(self.sd.unet.config, 'patch_size'):
                         patch_size = self.sd.unet.config.patch_size
                     
+                    # Determine num_train_timesteps for the call
+                    # If using custom timesteps, num_train_timesteps for the call should be length of custom_timesteps list
+                    # Otherwise, use the general self.train_config.num_train_timesteps
+                    steps_for_call = num_train_timesteps # Default
+                    custom_steps_to_pass = None
+                    if timestep_type == 'custom':
+                        if self.train_config.custom_timesteps is not None and len(self.train_config.custom_timesteps) > 0:
+                            steps_for_call = len(self.train_config.custom_timesteps)
+                            custom_steps_to_pass = self.train_config.custom_timesteps
+                        else:
+                            # Fallback or error if custom_timesteps is expected but not properly configured
+                            # This case should ideally be caught by checks in the scheduler itself if custom_steps_to_pass is None
+                            pass # Or raise an error here if custom_timesteps is mandatory for type 'custom'
+                    
                     self.sd.noise_scheduler.set_train_timesteps(
-                        num_train_timesteps,
+                        steps_for_call, # Use derived number of steps
                         device=self.device_torch,
                         timestep_type=timestep_type,
                         latents=latents,
+                        custom_timesteps_arg=custom_steps_to_pass # Pass the custom timesteps list
                     )
                 else:
                     self.sd.noise_scheduler.set_timesteps(

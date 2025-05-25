@@ -1,5 +1,5 @@
 import math
-from typing import Union
+from typing import Union, Optional, List
 from torch.distributions import LogNormal
 from diffusers import FlowMatchEulerDiscreteScheduler
 import torch
@@ -105,11 +105,36 @@ class CustomFlowMatchEulerDiscreteScheduler(FlowMatchEulerDiscreteScheduler):
     def scale_model_input(self, sample: torch.Tensor, timestep: Union[float, torch.Tensor]) -> torch.Tensor:
         return sample
 
-    def set_train_timesteps(self, num_inference_steps: int, device: Union[str, torch.device] = None, timestep_type: str = None, latents: torch.Tensor = None):
-        if timestep_type == "custom":
-            # Use the custom timesteps provided in the config
-            self.timesteps = torch.tensor(self.custom_timesteps, device=device)
-            self.num_inference_steps = len(self.custom_timesteps)
+    def set_train_timesteps(self, 
+                           num_inference_steps: int, 
+                           device: Union[str, torch.device] = None, 
+                           timestep_type: str = None, 
+                           latents: torch.Tensor = None,
+                           custom_timesteps_arg: Optional[List[int]] = None):
+        # Determine the effective timestep_type, prioritizing the argument
+        effective_timestep_type = timestep_type if timestep_type is not None else self.timestep_type
+
+        if effective_timestep_type == "custom":
+            # Determine the source of custom timesteps: argument first, then instance variable
+            current_custom_steps = custom_timesteps_arg if custom_timesteps_arg is not None else self.custom_timesteps
+            
+            if current_custom_steps is None:
+                raise ValueError(
+                    "CustomFlowMatchEulerDiscreteScheduler: timestep_type is 'custom' but no custom_timesteps provided "
+                    "(neither as argument nor found in scheduler's instance config). "
+                    "Ensure 'custom_timesteps' is configured correctly."
+                )
+            if not isinstance(current_custom_steps, (list, tuple)) or not current_custom_steps:
+                raise ValueError(
+                    f"CustomFlowMatchEulerDiscreteScheduler: timestep_type is 'custom' but custom_timesteps "
+                    f"is not a non-empty list or tuple. Received: {current_custom_steps}"
+                )
+            
+            # Use the custom timesteps
+            self.timesteps = torch.tensor(current_custom_steps, device=device, dtype=torch.long)
+            # num_inference_steps should ideally match len(current_custom_steps) when type is custom
+            self.num_inference_steps = len(current_custom_steps) 
         else:
             # Use the original implementation for other timestep types
-            super().set_train_timesteps(num_inference_steps, device, timestep_type, latents)
+            # num_inference_steps here is the one passed as argument, which is standard for non-custom types
+            super().set_train_timesteps(num_inference_steps, device, effective_timestep_type, latents)
