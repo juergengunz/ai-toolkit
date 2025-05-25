@@ -1543,11 +1543,22 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 arch = 'flux'
             if self.model_config.is_lumina2:
                 arch = 'lumina2'
+            
+            # Prepare sampler_kwargs from train_config
+            sampler_kwargs = {
+                "prediction_type": "v_prediction" if self.model_config.is_v_pred else "epsilon",
+            }
+            if hasattr(self.train_config, 'timestep_type') and self.train_config.timestep_type is not None:
+                sampler_kwargs['timestep_type'] = self.train_config.timestep_type
+            if hasattr(self.train_config, 'custom_timesteps') and self.train_config.custom_timesteps is not None:
+                sampler_kwargs['custom_timesteps'] = self.train_config.custom_timesteps
+            # Add any other relevant scheduler params from train_config here
+            # For example, if CustomFlowMatchEulerDiscreteScheduler expects other specific params
+            # from the main config, they should be added to sampler_kwargs similarly.
+
             sampler = get_sampler(
                 self.train_config.noise_scheduler,
-                {
-                    "prediction_type": "v_prediction" if self.model_config.is_v_pred else "epsilon",
-                },
+                sampler_kwargs, # Pass the more complete kwargs
                 arch=arch,
             )
 
