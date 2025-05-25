@@ -438,6 +438,7 @@ class TrainConfig:
         self.target_norm_std = kwargs.get('target_norm_std', None)
         self.target_norm_std_value = kwargs.get('target_norm_std_value', 1.0)
         self.timestep_type = kwargs.get('timestep_type', 'sigmoid')  # sigmoid, linear, lognorm_blend, next_sample
+        self.custom_timesteps: Optional[List[int]] = kwargs.get('custom_timesteps', None)
         self.next_sample_timesteps = kwargs.get('next_sample_timesteps', 8)
         self.linear_timesteps = kwargs.get('linear_timesteps', False)
         self.linear_timesteps2 = kwargs.get('linear_timesteps2', False)
@@ -463,6 +464,17 @@ class TrainConfig:
         # forces same noise for the same image at a given size.
         self.force_consistent_noise = kwargs.get('force_consistent_noise', False)
         self.blended_blur_noise = kwargs.get('blended_blur_noise', False)
+        # ADDING NEW CONFIGS HERE
+        self.warmup_steps: int = kwargs.get('warmup_steps', 0)
+        self.adam_beta_1: float = kwargs.get('adam_beta_1', 0.9)
+        self.adam_beta_2: float = kwargs.get('adam_beta_2', 0.999)
+        self.adam_eps: float = kwargs.get('adam_eps', 1e-08)
+        self.gpu_noise: bool = kwargs.get('gpu_noise', False) # Defaulting to False as it can be specific
+        self.embedding_noise: float = kwargs.get('embedding_noise', 0.0)
+        self.pooled_embedding_noise: float = kwargs.get('pooled_embedding_noise', 0.0)
+        self.validate_every: Optional[int] = kwargs.get('validate_every', None)
+        self.do_image_validation: bool = kwargs.get('do_image_validation', False)
+        self.skip_first_validation: bool = kwargs.get('skip_first_validation', False)
 
 
 ModelArch = Literal['sd1', 'sd2', 'sd3', 'sdxl', 'pixart', 'pixart_sigma', 'auraflow', 'flux', 'flex1', 'flex2', 'lumina2', 'vega', 'ssd', 'wan21']
