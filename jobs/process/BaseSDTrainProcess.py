@@ -1916,9 +1916,20 @@ class BaseSDTrainProcess(BaseTrainProcess):
         
         # esure params require grad
         self.ensure_params_requires_grad(force=True)
-        optimizer = get_optimizer(self.params, optimizer_type, learning_rate=self.train_config.lr,
-                                  optimizer_params=self.train_config.optimizer_params)
-        self.optimizer = optimizer
+        if optimizer_type == 'adam8bit':
+            self.optimizer = bnb.optim.Adam8bit(
+                self.params,
+                lr=self.train_config.lr,
+                betas=(self.adam_beta1, self.adam_beta2),
+                eps=self.adam_eps
+            )
+        else:
+            self.optimizer = get_optimizer(
+                self.params,
+                optimizer_type,
+                learning_rate=self.train_config.lr,
+                optimizer_params=self.train_config.optimizer_params
+            )
         
         # set it to do paramiter swapping
         if self.train_config.do_paramiter_swapping:
