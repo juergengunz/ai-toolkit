@@ -244,14 +244,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
         self.adam_beta2 = getattr(self.train_config, 'adam_beta_2', 0.999)
         self.adam_eps = getattr(self.train_config, 'adam_eps', 1e-08)
         
-        # When creating the optimizer, use these parameters
-        if self.train_config.optimizer == 'adam8bit':
-            self.optimizer = bnb.optim.Adam8bit(
-                self.params,
-                lr=self.train_config.lr,
-                betas=(self.adam_beta1, self.adam_beta2),
-                eps=self.adam_eps
-            )
 
         self.warmup_steps = self.train_config.warmup_steps if hasattr(self.train_config, 'warmup_steps') else 0
 
@@ -780,7 +772,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
             
             with self.timer('optimizer_step'):
                 # Apply learning rate warmup
-                lr_scale = self.get_lr_scale(self.current_step)
+                lr_scale = self.get_lr_scale(self.step_num)
                 for param_group in self.optimizer.param_groups:
                     param_group['lr'] = self.train_config.lr * lr_scale
                 
@@ -2329,7 +2321,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
 
         flush()
         self.done_hook()
-
     def push_to_hub(
     self,
     repo_id: str,
@@ -2468,3 +2459,4 @@ For more details, including weighting, merging and fusing LoRAs, check the [docu
 
 """
         return readme_content
+
