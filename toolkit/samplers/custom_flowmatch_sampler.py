@@ -22,9 +22,9 @@ def calculate_shift(
 class CustomFlowMatchEulerDiscreteScheduler(FlowMatchEulerDiscreteScheduler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.init_noise_sigma = 1.0
-        self.timestep_type = "linear"
-        self.custom_timesteps = None
+        self.init_noise_sigma = self.config.get("init_noise_sigma", 1.0)
+        self.timestep_type = self.config.get("timestep_type", "linear")
+        self.custom_timesteps = self.config.get("custom_timesteps", None)
 
         with torch.no_grad():
             # create weights for timesteps
