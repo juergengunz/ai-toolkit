@@ -1235,51 +1235,66 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 if is_reg:
                     content_or_style = self.train_config.content_or_style_reg
 
+                # Determine the number of available timesteps for indexing
+                # This depends on whether custom timesteps are used.
+                num_available_timesteps_for_indexing = len(self.sd.noise_scheduler.timesteps)
+
                 # if self.train_config.timestep_sampling == 'style' or self.train_config.timestep_sampling == 'content':
                 if self.train_config.timestep_type == 'next_sample':
-                    timestep_indices = torch.randint(
-                            0,
-                            num_train_timesteps - 2, # -1 for 0 idx, -1 so we can step
-                            (batch_size,),
-                            device=self.device_torch
-                        )
+                    # For 'next_sample', num_train_timesteps was potentially set to self.train_config.next_sample_timesteps
+                    # We need to ensure we sample indices within the bounds of the *actual* scheduler's timesteps
+                    # if custom timesteps are used, num_available_timesteps_for_indexing is their length.
+                    # if not, it's num_train_timesteps (from noise_scheduler.set_timesteps)
+                    # The original num_train_timesteps variable might be 1000, but scheduler could have fewer if custom.
+                    upper_bound_for_randint = num_available_timesteps_for_indexing
+                    if upper_bound_for_randint <= 2: # Need at least 3 to pick from 0 to N-2
+                        # Fallback or raise error: not enough timesteps to sample for 'next_sample'
+                        # This case should ideally be handled by ensuring custom_timesteps list is long enough
+                        # or by not using 'next_sample' with very short custom_timesteps.
+                        # For now, we'll clamp to a valid range if possible, or just pick the first one.
+                        if upper_bound_for_randint > 0:
+                             timestep_indices = torch.zeros((batch_size,), device=self.device_torch).long() # Pick first timestep
+                        else:
+                            raise ValueError("Not enough timesteps in scheduler for 'next_sample' type.")
+                    else:
+                        timestep_indices = torch.randint(
+                                0,
+                                upper_bound_for_randint - 2, # -1 for 0 idx, -1 so we can step
+                                (batch_size,),
+                                device=self.device_torch
+                            )
                     timestep_indices = timestep_indices.long()
                 elif content_or_style in ['style', 'content']:
-                    # this is from diffusers training code
-                    # Cubic sampling for favoring later or earlier timesteps
-                    # For more details about why cubic sampling is used for content / structure,
-                    # refer to section 3.4 of https://arxiv.org/abs/2302.08453
-
-                    # for content / structure, it is best to favor earlier timesteps
-                    # for style, it is best to favor later timesteps
-
-                    orig_timesteps = torch.rand((batch_size,), device=latents.device)
+                    orig_timesteps_rand = torch.rand((batch_size,), device=latents.device)
+                    
+                    # Target range for indices is now based on the actual number of scheduler timesteps
+                    target_min_idx = 0
+                    target_max_idx = num_available_timesteps_for_indexing - 1
 
                     if content_or_style == 'content':
-                        timestep_indices = orig_timesteps ** 3 * self.train_config.num_train_timesteps
+                        # Map cubic sampling to the 0-1 range first
+                        norm_indices = orig_timesteps_rand ** 3
                     elif content_or_style == 'style':
-                        timestep_indices = (1 - orig_timesteps ** 3) * self.train_config.num_train_timesteps
-
-                    timestep_indices = value_map(
-                        timestep_indices,
-                        0,
-                        self.train_config.num_train_timesteps - 1,
-                        min_noise_steps,
-                        max_noise_steps - 1
-                    )
-                    timestep_indices = timestep_indices.long().clamp(
-                        min_noise_steps + 1,
-                        max_noise_steps - 1
-                    )
+                        # Map cubic sampling to the 0-1 range first
+                        norm_indices = (1 - orig_timesteps_rand ** 3)
+                    
+                    # Scale normalized indices to the actual range of available timestep indices
+                    # and clamp to ensure they are valid indices for self.sd.noise_scheduler.timesteps
+                    timestep_indices = (norm_indices * target_max_idx).long().clamp(target_min_idx, target_max_idx)
                     
                 elif content_or_style == 'balanced':
-                    if min_noise_steps == max_noise_steps:
-                        timestep_indices = torch.ones((batch_size,), device=self.device_torch) * min_noise_steps
+                    # Sample indices directly from the range of available timesteps
+                    target_min_idx = 0
+                    target_max_idx = num_available_timesteps_for_indexing -1
+
+                    if target_min_idx == target_max_idx : # Only one timestep available
+                         timestep_indices = torch.ones((batch_size,), device=self.device_torch).long() * target_min_idx
+                    elif target_min_idx > target_max_idx: # No timesteps available
+                        raise ValueError("No timesteps available in scheduler for 'balanced' sampling.")
                     else:
-                        # todo, some schedulers use indices, otheres use timesteps. Not sure what to do here
                         timestep_indices = torch.randint(
-                            min_noise_steps + 1,
-                            max_noise_steps - 1,
+                            target_min_idx,
+                            target_max_idx + 1, # randint is exclusive for the upper bound
                             (batch_size,),
                             device=self.device_torch
                         )
