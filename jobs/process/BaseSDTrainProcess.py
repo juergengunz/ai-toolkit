@@ -1210,7 +1210,6 @@ class BaseSDTrainProcess(BaseTrainProcess):
                         device=self.device_torch,
                         timestep_type=timestep_type,
                         latents=latents,
-                        patch_size=patch_size,
                     )
                 else:
                     self.sd.noise_scheduler.set_timesteps(
