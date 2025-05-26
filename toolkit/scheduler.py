@@ -24,7 +24,12 @@ def get_lr_scheduler(
         **kwargs: Additional arguments specific to the scheduler type.
     """
     if num_training_steps is None:
-        raise ValueError("num_training_steps must be provided to get_lr_scheduler.")
+        # default to a large number. Should be set for most schedulers
+        # raise ValueError("num_training_steps must be set for most schedulers")
+        # just set a high number for now for ones that dont need it like constant
+        num_training_steps = 1000
+
+    print(f"DEBUG SCHEDULER: Attempting to create scheduler '{name}' with effective warmup_steps={num_warmup_steps}, training_steps={num_training_steps}, extra_params={kwargs}") # DEBUG ADDED
 
     try:
         # Map common names to SchedulerType if necessary, or expect direct SchedulerType string
@@ -48,6 +53,8 @@ def get_lr_scheduler(
             num_training_steps=num_training_steps,
             **kwargs # Pass through any other specific params from lr_scheduler_params
         )
+
+        print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}") # DEBUG ADDED
         return scheduler
     except Exception as e:
         print(f"Error creating scheduler '{name}' with Hugging Face/Diffusers: {e}")

@@ -776,9 +776,9 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 # for param_group in self.optimizer.param_groups:
                 #    param_group['lr'] = self.train_config.lr * lr_scale
                 
-                print_acc(f"DEBUG ST-{self.step_num} GAC-{self.grad_accumulation_step}: Before optimizer.step(), LR: {self.optimizer.param_groups[0]['lr']:.4e}")
+                # print_acc(f"DEBUG ST-{self.step_num} GAC-{self.grad_accumulation_step}: Before optimizer.step(), LR: {self.optimizer.param_groups[0]['lr']:.4e}") # DEBUG REMOVED
                 self.optimizer.step()
-                print_acc(f"DEBUG ST-{self.step_num}: After optimizer.step(), LR: {self.optimizer.param_groups[0]['lr']:.4e}")
+                # print_acc(f"DEBUG ST-{self.step_num}: After optimizer.step(), LR: {self.optimizer.param_groups[0]['lr']:.4e}") # DEBUG REMOVED
                 self.optimizer.zero_grad(set_to_none=True)
                 if self.adapter and isinstance(self.adapter, CustomAdapter):
                     self.adapter.post_weight_update()
@@ -803,17 +803,17 @@ class BaseSDTrainProcess(BaseTrainProcess):
             # For simplicity and direct control here, we step it if an optimizer step was made.
             if not self.is_grad_accumulation_step:
                  # Accessing last_epoch might need to go through .scheduler if wrapped by AcceleratedScheduler
-                 scheduler_to_inspect = self.lr_scheduler
-                 if hasattr(self.lr_scheduler, 'scheduler'):
-                     scheduler_to_inspect = self.lr_scheduler.scheduler
-                 print_acc(f"DEBUG ST-{self.step_num}: Before lr_scheduler.step(), Scheduler last_epoch: {getattr(scheduler_to_inspect, 'last_epoch', 'N/A')}, Opt LR: {self.optimizer.param_groups[0]['lr']:.4e}")
+                 # scheduler_to_inspect = self.lr_scheduler # DEBUG REMOVED
+                 # if hasattr(self.lr_scheduler, 'scheduler'): # DEBUG REMOVED
+                 #     scheduler_to_inspect = self.lr_scheduler.scheduler # DEBUG REMOVED
+                 # print_acc(f"DEBUG ST-{self.step_num}: Before lr_scheduler.step(), Scheduler last_epoch: {getattr(scheduler_to_inspect, 'last_epoch', 'N/A')}, Opt LR: {self.optimizer.param_groups[0]['lr']:.4e}") # DEBUG REMOVED
                  
                  self.lr_scheduler.step()
                  
                  # Re-inspect after step
-                 if hasattr(self.lr_scheduler, 'scheduler'):
-                     scheduler_to_inspect = self.lr_scheduler.scheduler
-                 print_acc(f"DEBUG ST-{self.step_num}: After lr_scheduler.step(), Scheduler last_epoch: {getattr(scheduler_to_inspect, 'last_epoch', 'N/A')}, Opt LR: {self.optimizer.param_groups[0]['lr']:.4e}")
+                 # if hasattr(self.lr_scheduler, 'scheduler'): # DEBUG REMOVED
+                 #     scheduler_to_inspect = self.lr_scheduler.scheduler # DEBUG REMOVED
+                 # print_acc(f"DEBUG ST-{self.step_num}: After lr_scheduler.step(), Scheduler last_epoch: {getattr(scheduler_to_inspect, 'last_epoch', 'N/A')}, Opt LR: {self.optimizer.param_groups[0]['lr']:.4e}") # DEBUG REMOVED
 
         if self.embedding is not None:
             with self.timer('restore_embeddings'):
@@ -2238,7 +2238,7 @@ class BaseSDTrainProcess(BaseTrainProcess):
                 else:
                     learning_rate = self.optimizer.param_groups[0]['lr']
 
-                prog_bar_string = f"lr: {learning_rate:.1e}"
+                prog_bar_string = f"lr: {learning_rate:.3e}"
                 for key, value in loss_dict.items():
                     prog_bar_string += f" {key}: {value:.3e}"
 
