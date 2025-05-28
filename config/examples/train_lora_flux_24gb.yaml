@@ -38,7 +38,7 @@ config:
           cache_latents_to_disk: true  # leave this true unless you know what you're doing
           resolution: [ 512, 768, 1024 ]  # flux enjoys multiple resolutions
       train:
-        batch_size: 1
+        batch_size: 8
         steps: 1000  # total number of steps to train 500 - 4000 is a good range
         gradient_accumulation_steps: 1
         train_unet: true
@@ -51,7 +51,9 @@ config:
         adam_beta_1: 0.9
         adam_beta_2: 0.999
         adam_eps: 1e-08
-        lr_scheduler: "cosine"
+        lr_scheduler: "cosine_with_min_lr"
+        lr_scheduler_params:
+          min_lr: 0.0001
         timestep_type: "custom"
         custom_timesteps: [960, 893, 866, 839, 812, 785, 757, 730, 703, 676, 649, 622, 595, 568, 541, 514, 486, 459, 432, 405, 378, 351, 324, 297, 270, 243, 215, 188, 161, 134, 107, 40]
         gpu_noise: true
