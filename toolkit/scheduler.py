@@ -51,7 +51,7 @@ def get_lr_scheduler(
             optimizer=optimizer,
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps,
-            **kwargs # Pass through any other specific params from lr_scheduler_params
+            scheduler_specific_kwargs=kwargs # Pass other specific scheduler params directly
         )
 
         print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}") # DEBUG ADDED
