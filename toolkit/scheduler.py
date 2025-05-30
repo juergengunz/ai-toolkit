@@ -2,6 +2,32 @@ import torch
 from typing import Optional
 # Use the get_scheduler from diffusers.optimization which is robust
 from diffusers.optimization import get_scheduler, SchedulerType
+from torch.optim.lr_scheduler import LambdaLR
+
+
+def get_cosine_schedule_with_min_lr(
+    optimizer: torch.optim.Optimizer,
+    num_warmup_steps: int,
+    num_training_steps: int,
+    min_lr: float,
+):
+    """
+    Create a schedule with a learning rate that decreases following the values of the cosine function between the
+    initial lr set in the optimizer to min_lr, after a warmup period during which it increases linearly between 0 and
+    the initial lr set in the optimizer.
+    """
+    def lr_lambda(current_step: int):
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        # Get the initial learning rate from the optimizer
+        initial_lr = optimizer.param_groups[0]["lr"]
+        # Calculate the cosine decay
+        cosine_decay = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)))
+        # Scale the decay to go from initial_lr to min_lr
+        return min_lr + (initial_lr - min_lr) * cosine_decay
+
+    return LambdaLR(optimizer, lr_lambda)
 
 
 def get_lr_scheduler(
@@ -29,18 +55,19 @@ def get_lr_scheduler(
         # just set a high number for now for ones that dont need it like constant
         num_training_steps = 1000
 
-    print(f"DEBUG SCHEDULER: Attempting to create scheduler '{name}' with effective warmup_steps={num_warmup_steps}, training_steps={num_training_steps}, extra_params={kwargs}") # DEBUG ADDED
+    print(f"DEBUG SCHEDULER: Attempting to create scheduler '{name}' with effective warmup_steps={num_warmup_steps}, training_steps={num_training_steps}, extra_params={kwargs}")
 
     try:
-        # Map common names to SchedulerType if necessary, or expect direct SchedulerType string
-        # For example, if user passes "cosine", SchedulerType("cosine") is "cosine".
-        # If user passes "cosine_with_warmup", it should be SchedulerType.COSINE_WITH_RESTARTS or similar,
-        # though many schedulers inherently handle warmup if num_warmup_steps > 0.
-        
-        # The `get_scheduler` function from diffusers/transformers handles mapping string names
-        # to the correct scheduler functions and passes num_warmup_steps, num_training_steps,
-        # and other kwargs appropriately.
-        
+        # Handle our custom cosine scheduler with min_lr
+        if name == "cosine_with_min_lr":
+            min_lr = kwargs.pop("min_lr", 0.0001)  # Default to 0.0001 if not specified
+            return get_cosine_schedule_with_min_lr(
+                optimizer=optimizer,
+                num_warmup_steps=num_warmup_steps,
+                num_training_steps=num_training_steps,
+                min_lr=min_lr,
+            )
+
         # Clean up any problematic kwargs that might have been added by older calling code
         kwargs.pop('total_iters', None)
         kwargs.pop('T_max', None)
