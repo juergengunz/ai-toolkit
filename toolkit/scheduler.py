@@ -47,11 +47,11 @@ def get_lr_scheduler(
         kwargs.pop('T_0', None)
 
         scheduler = get_scheduler(
-            name=name,
+            name,
             optimizer=optimizer,
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps,
-            scheduler_specific_kwargs=kwargs # Pass other specific scheduler params directly
+            **kwargs
         )
 
         print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}") # DEBUG ADDED
