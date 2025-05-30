@@ -17,15 +17,27 @@ def get_cosine_schedule_with_min_lr(
     the initial lr set in the optimizer.
     """
     def lr_lambda(current_step: int):
-        if current_step < num_warmup_steps:
-            return float(current_step) / float(max(1, num_warmup_steps))
-        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
         # Get the initial learning rate from the optimizer
         initial_lr = optimizer.param_groups[0]["lr"]
-        # Calculate the cosine decay
+        
+        if current_step < num_warmup_steps:
+            # During warmup: linear increase from 0 to initial_lr
+            return float(current_step) / float(max(1, num_warmup_steps))
+        
+        # After warmup: cosine decay from initial_lr to min_lr
+        # Calculate progress from 0 to 1 over the remaining steps
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        
+        # The cosine function goes from 1 to -1, so we scale it to go from 1 to 0
         cosine_decay = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)))
+        
         # Scale the decay to go from initial_lr to min_lr
-        return min_lr + (initial_lr - min_lr) * cosine_decay
+        # When progress = 0, cosine_decay = 1, so lr = initial_lr
+        # When progress = 1, cosine_decay = 0, so lr = min_lr
+        lr = min_lr + (initial_lr - min_lr) * cosine_decay
+        
+        # Ensure we never go below min_lr
+        return max(lr, min_lr)
 
     return LambdaLR(optimizer, lr_lambda)
 
@@ -51,8 +63,6 @@ def get_lr_scheduler(
     """
     if num_training_steps is None:
         # default to a large number. Should be set for most schedulers
-        # raise ValueError("num_training_steps must be set for most schedulers")
-        # just set a high number for now for ones that dont need it like constant
         num_training_steps = 1000
 
     print(f"DEBUG SCHEDULER: Attempting to create scheduler '{name}' with effective warmup_steps={num_warmup_steps}, training_steps={num_training_steps}, extra_params={kwargs}")
@@ -60,7 +70,8 @@ def get_lr_scheduler(
     try:
         # Handle our custom cosine scheduler with min_lr
         if name == "cosine_with_min_lr":
-            min_lr = kwargs.pop("min_lr", 0.0001)  # Default to 0.0001 if not specified
+            min_lr = float(kwargs.pop("min_lr", 0.0001))  # Ensure min_lr is a float
+            print(f"DEBUG SCHEDULER: Using custom cosine scheduler with min_lr={min_lr}")
             return get_cosine_schedule_with_min_lr(
                 optimizer=optimizer,
                 num_warmup_steps=num_warmup_steps,
@@ -81,13 +92,11 @@ def get_lr_scheduler(
             **kwargs
         )
 
-        print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}") # DEBUG ADDED
+        print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}")
         return scheduler
     except Exception as e:
         print(f"Error creating scheduler '{name}' with Hugging Face/Diffusers: {e}")
         print(f"Make sure '{name}' is a valid scheduler name recognized by `diffusers.optimization.SchedulerType` "
               f"or `transformers.optimization.SchedulerType` and all required arguments are provided (like num_training_steps).")
         print("Valid names include: linear, cosine, cosine_with_restarts, polynomial, constant, constant_with_warmup.")
-        # Fallback or re-raise, depending on desired strictness
-        # For now, re-raise to make issues apparent
         raise ValueError(f"Could not create scheduler: {name}") from e
