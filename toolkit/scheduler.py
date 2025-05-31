@@ -22,7 +22,9 @@ def get_cosine_schedule_with_min_lr(
         
         if current_step < num_warmup_steps:
             # During warmup: linear increase from 0 to initial_lr
-            return float(current_step) / float(max(1, num_warmup_steps))
+            lr = initial_lr * float(current_step) / float(max(1, num_warmup_steps))
+            print(f"DEBUG LR: step={current_step}, warmup phase, lr={lr}")
+            return lr
         
         # After warmup: cosine decay from initial_lr to min_lr
         # Calculate progress from 0 to 1 over the remaining steps
@@ -37,7 +39,9 @@ def get_cosine_schedule_with_min_lr(
         lr = min_lr + (initial_lr - min_lr) * cosine_decay
         
         # Ensure we never go below min_lr
-        return max(lr, min_lr)
+        lr = max(lr, min_lr)
+        print(f"DEBUG LR: step={current_step}, decay phase, progress={progress:.3f}, cosine_decay={cosine_decay:.3f}, lr={lr}")
+        return lr
 
     return LambdaLR(optimizer, lr_lambda)
 
