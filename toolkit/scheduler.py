@@ -16,32 +16,49 @@ def get_cosine_schedule_with_min_lr(
     initial lr set in the optimizer to min_lr, after a warmup period during which it increases linearly between 0 and
     the initial lr set in the optimizer.
     """
+    # Get the initial learning rate from the optimizer
+    initial_lr = optimizer.param_groups[0]["lr"]
+    min_scale = min_lr / initial_lr
+    
+    print(f"DEBUG LR: Scheduler initialized - initial_lr={initial_lr}, min_lr={min_lr}, min_scale={min_scale:.4f}")
+    print(f"DEBUG LR: Warmup steps: {num_warmup_steps}, Total steps: {num_training_steps}")
+
     def lr_lambda(current_step: int):
-        # Get the initial learning rate from the optimizer
-        initial_lr = optimizer.param_groups[0]["lr"]
-        
         if current_step < num_warmup_steps:
-            # During warmup: linear increase from 0 to initial_lr
-            lr = initial_lr * float(current_step) / float(max(1, num_warmup_steps))
-            print(f"DEBUG LR: step={current_step}, warmup phase, lr={lr}")
-            return lr
+            # During warmup: linear increase from 0 to 1
+            if num_warmup_steps == 0:
+                scale_factor = 1.0
+            else:
+                scale_factor = float(current_step) / float(num_warmup_steps)
+            
+            actual_lr = initial_lr * scale_factor
+            if current_step % 50 == 0:  # Log every 50 steps to reduce spam
+                print(f"DEBUG LR: step={current_step}, warmup, scale={scale_factor:.4f}, lr={actual_lr:.6f}")
+            return scale_factor
         
-        # After warmup: cosine decay from initial_lr to min_lr
-        # Calculate progress from 0 to 1 over the remaining steps
-        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        # After warmup: cosine decay from 1 to min_scale
+        remaining_steps = num_training_steps - num_warmup_steps
+        if remaining_steps <= 0:
+            # If no remaining steps, use min_scale
+            scale_factor = min_scale
+        else:
+            progress = float(current_step - num_warmup_steps) / float(remaining_steps)
+            progress = min(progress, 1.0)  # Clamp to [0, 1]
+            
+            # Cosine decay: goes from 1 to 0 as progress goes from 0 to 1
+            cosine_decay = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)).item())
+            
+            # Scale from 1 to min_scale
+            scale_factor = min_scale + (1.0 - min_scale) * cosine_decay
         
-        # The cosine function goes from 1 to -1, so we scale it to go from 1 to 0
-        cosine_decay = 0.5 * (1.0 + torch.cos(torch.tensor(progress * torch.pi)))
+        # Ensure we never go below min_scale
+        scale_factor = max(scale_factor, min_scale)
+        actual_lr = initial_lr * scale_factor
         
-        # Scale the decay to go from initial_lr to min_lr
-        # When progress = 0, cosine_decay = 1, so lr = initial_lr
-        # When progress = 1, cosine_decay = 0, so lr = min_lr
-        lr = min_lr + (initial_lr - min_lr) * cosine_decay
+        if current_step % 50 == 0:  # Log every 50 steps to reduce spam
+            print(f"DEBUG LR: step={current_step}, decay, progress={progress:.3f}, scale={scale_factor:.4f}, lr={actual_lr:.6f}")
         
-        # Ensure we never go below min_lr
-        lr = max(lr, min_lr)
-        print(f"DEBUG LR: step={current_step}, decay phase, progress={progress:.3f}, cosine_decay={cosine_decay:.3f}, lr={lr}")
-        return lr
+        return scale_factor
 
     return LambdaLR(optimizer, lr_lambda)
 
