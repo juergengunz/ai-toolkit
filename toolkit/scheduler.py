@@ -4,6 +4,23 @@ from typing import Optional
 from diffusers.optimization import get_scheduler, SchedulerType
 
 
+class MinLRSchedulerWrapper:
+    def __init__(self, scheduler, optimizer, min_lr):
+        self.scheduler = scheduler
+        self.optimizer = optimizer
+        self.min_lr = min_lr
+
+    def step(self, epoch=None):
+        self.scheduler.step(epoch)
+        for param_group in self.optimizer.param_groups:
+            if 'lr' in param_group:
+                param_group['lr'] = max(param_group['lr'], self.min_lr)
+
+    def __getattr__(self, name):
+        # Forward other attributes to the original scheduler
+        return getattr(self.scheduler, name)
+
+
 def get_lr_scheduler(
         name: str, # Should be a string recognized by SchedulerType
         optimizer: torch.optim.Optimizer,
@@ -31,6 +48,8 @@ def get_lr_scheduler(
 
     print(f"DEBUG SCHEDULER: Attempting to create scheduler '{name}' with effective warmup_steps={num_warmup_steps}, training_steps={num_training_steps}, extra_params={kwargs}") # DEBUG ADDED
 
+    min_lr = kwargs.pop('min_lr', None)
+
     try:
         # Map common names to SchedulerType if necessary, or expect direct SchedulerType string
         # For example, if user passes "cosine", SchedulerType("cosine") is "cosine".
@@ -55,6 +74,9 @@ def get_lr_scheduler(
         )
 
         print(f"DEBUG SCHEDULER: Successfully created scheduler object: {type(scheduler)}") # DEBUG ADDED
+        if min_lr is not None:
+            print(f"DEBUG SCHEDULER: Wrapping scheduler with MinLRSchedulerWrapper, min_lr={min_lr}") # DEBUG ADDED
+            return MinLRSchedulerWrapper(scheduler, optimizer, min_lr)
         return scheduler
     except Exception as e:
         print(f"Error creating scheduler '{name}' with Hugging Face/Diffusers: {e}")

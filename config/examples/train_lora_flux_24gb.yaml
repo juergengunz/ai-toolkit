@@ -46,12 +46,14 @@ config:
         gradient_checkpointing: true  # need the on unless you have a ton of vram
         noise_scheduler: "flowmatch" # for training only
         optimizer: "adam8bit"
-        lr: 0.00115
+        lr: 0.00025
         warmup_steps: 200
         adam_beta_1: 0.9
         adam_beta_2: 0.999
         adam_eps: 1e-08
         lr_scheduler: "cosine"
+        lr_scheduler_params:
+          min_lr: 0.0001
         timestep_type: "custom"
         custom_timesteps: [960, 893, 866, 839, 812, 785, 757, 730, 703, 676, 649, 622, 595, 568, 541, 514, 486, 459, 432, 405, 378, 351, 324, 297, 270, 243, 215, 188, 161, 134, 107, 40]
         gpu_noise: true
@@ -63,7 +65,7 @@ config:
         # uncomment this to skip the pre training sample
 #        skip_first_sample: true
         # uncomment to completely disable sampling
-#        disable_sampling: true
+        disable_sampling: true
         # uncomment to use new vell curved weighting. Experimental but may produce better results
 #        linear_timesteps: true
 
@@ -85,20 +87,6 @@ config:
         sample_every: 250 # sample every this many steps
         width: 1024
         height: 1024
-        prompts:
-          # you can add [trigger] to the prompts here and it will be replaced with the trigger word
-#          - "[trigger] holding a sign that says 'I LOVE PROMPTS!'"\
-          - "woman with red hair, playing chess at the park, bomb going off in the background"
-          - "a woman holding a coffee cup, in a beanie, sitting at a cafe"
-          - "a horse is a DJ at a night club, fish eye lens, smoke machine, lazer lights, holding a martini"
-          - "a man showing off his cool new t shirt at the beach, a shark is jumping out of the water in the background"
-          - "a bear building a log cabin in the snow covered mountains"
-          - "woman playing the guitar, on stage, singing a song, laser lights, punk rocker"
-          - "hipster man with a beard, building a chair, in a wood shop"
-          - "photo of a man, white background, medium shot, modeling clothing, studio lighting, white backdrop"
-          - "a man holding a sign that says, 'this is a sign'"
-          - "a bulldog, in a post apocalyptic world, with a shotgun, in a leather jacket, in a desert, with a motorcycle"
-        neg: ""  # not used on flux
         seed: 42
         walk_seed: true
         guidance_scale: 4
